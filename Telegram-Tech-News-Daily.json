@@ -1,0 +1,273 @@
+{
+  "name": "Telegram-Tech-News-Daily",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "@morning_tech_news",
+        "text": "={{ $now.format('yyyy-MM-dd') }}\n{{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1104, -64],
+      "id": "d1bc5c29-c583-460c-87d6-c28b9c774074",
+      "name": "Send a text message",
+      "webhookId": "b6f8e489-d833-415a-b7c9-3084e2e8a395",
+      "credentials": {
+        "telegramApi": {
+          "id": "OIVrPmDe17FMgVEy",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [-480, 96],
+      "id": "2ba4d286-ad4c-4ad0-803f-08a3aba764bb",
+      "name": "RSS Read"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert tech news curator.\n\nYou will receive a list of article titles and links.\nYour tasks are:\n\n1. Analyze ALL titles.\n2. Evaluate importance score for each title (1~10).\n3. Select the Top 5 most important articles.\n4. For each selected article:\n   - Keep the original title (English)\n   - Add a Korean-translated title (title_ko)\n   - Return the original link\n   - Include the importance score\n\nReturn ONLY this JSON:\n\n{\n  \"top5\": [\n    {\n      \"rank\": 1,\n      \"title\": \"Original English Title\",\n      \"title_ko\": \"한국어 번역 제목\",\n      \"score\": 9.3,\n      \"content\": \"Goole Play's app of the yera...\"\n      \"link\": \"https://...\"\n    }\n  ]\n}\n\nImportant:\n- title_ko, contet는 한글로 번역\n- JSON 외 텍스트 절대 포함 금지"
+            },
+            {
+              "content": "=다음은 Tech Article 제목과 링크 목록입니다.\n\n각 제목을 중요도 기준으로 평가하여 상위 5개 기사를 선별하여 JSON 형식에 맞게 반환하세요.\n\n제목 + 링크 목록:\n{{ $json[\"titles_block\"] }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [256, -64],
+      "id": "81e3306f-aaea-4cb1-9431-c511098b6687",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "r4es3rkrNh9Q0cKS",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nlet finalList = '';\n\nitems.forEach((item, index) => {\n  const t = item.json.title || '';\n  const l = item.json.link || '';\n  const c = item.json.contentSnippet || '';\n\n  finalList += `${index + 1}. ${t}\\n`;\n  finalList += `link: ${l}\\n\\n`;\n  finalList += `link: ${c}\\n\\n`;\n});\n\nreturn [\n  {\n    json: { titles_block: finalList }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [32, -64],
+      "id": "02922e59-b2af-4a24-aa39-5158a2a7522c",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-912, 96],
+      "id": "36f09bd8-8167-4094-8b13-a3f547998165",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "48c45c72-2b8b-4384-aa24-716bd84aa3d2",
+              "leftValue": "={{ new Date($json[\"pubDate\"]).getTime() }}",
+              "rightValue": "={{ new Date().getTime() - 86400000 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "7030947a-43cb-4362-ad0f-36ffdb9271c1",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-272, 96],
+      "id": "3d0dd042-c962-4474-ade0-0defdfb1601e",
+      "name": "If(지금으로부터 24시간 전)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const top5 = $input.first().json.top5;\n\n// 헤더: 굵게 강조하고 이모지로 시선 집중\nlet msg = \"📡 *오늘의 Tech 뉴스 Top 5* 🚀\\n\\n\"; \n\ntop5.forEach(item => {\n  // 1. 제목 (한글 제목은 굵게, 영어 제목은 기울임꼴로 구분)\n  msg += `*${item.rank}. ${item.title_ko}*\\n`;\n  msg += `_(${item.title})_\\n\\n`;\n\n  // 2. 점수 (선택사항, 깔끔하게 한 줄 처리)\n  msg += `💡 중요도: ${item.score} / 10\\n\\n`;\n\n  // 3. 요약 (가장 중요한 부분: '요약:' 글자와 본문 사이에 줄바꿈 추가)\n  msg += `📝 *3줄 요약*\\n`;\n  // 요약문이 없을 경우를 대비한 안전장치\n  const content = item.content ? item.content.trim() : \"요약 내용을 불러오지 못했습니다.\";\n  msg += `${content}\\n\\n`; \n\n  // 4. 링크 (긴 URL 대신 텍스트 링크로 처리)\n  // Telegram Markdown 포맷: [텍스트](URL)\n  msg += `🔗 [원문 기사 보러가기](${item.link})\\n`;\n\n  // 5. 구분선 (기사 간 명확한 분리)\n  msg += `━━━━━━━━━━━━━━\\n\\n`;\n});\n\nreturn [\n  { json: { text: msg } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [864, -64],
+      "id": "d8d05b2c-c345-4f7f-b565-543c06a00e4a",
+      "name": "문장 다듬기"
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI 및 앱 관련 알짜배기 피드만 모았습니다\nconst feeds = [\n  // \"https://techcrunch.com/category/artificial-intelligence/feed/\", // TechCrunch AI\n  \"https://techcrunch.com/category/apps/feed/\",                    // TechCrunch Apps\n  // \"https://www.technologyreview.com/topic/artificial-intelligence/feed\" // MIT AI\n];\n\n// n8n이 이해할 수 있는 형태로 변환\nreturn feeds.map(url => {\n  return {\n    json: {\n      url: url\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-688, 96],
+      "id": "5eed020c-b9c0-473b-9e0b-4fa9cd051bb6",
+      "name": "feed url 배열"
+    },
+    {
+      "parameters": {
+        "jsCode": "// GPT 결과 문자열 가져오기\nconst raw = $input.first().json.output[0].content[0].text;\n\n// 문자열 → JSON 객체로 변환\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  throw new Error(\"JSON 파싱 실패: \" + e.message);\n}\n\n// 이제 parsed.top5 사용 가능\nreturn [\n  {\n    json: parsed\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [608, -64],
+      "id": "ec4e7bab-a4fa-4939-9b74-cb584706cd2c",
+      "name": "문자열 → JSON"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "RSS Read": {
+      "main": [
+        [
+          {
+            "node": "If(지금으로부터 24시간 전)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "문자열 → JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "feed url 배열",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If(지금으로부터 24시간 전)": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "문장 다듬기": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "feed url 배열": {
+      "main": [
+        [
+          {
+            "node": "RSS Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "문자열 → JSON": {
+      "main": [
+        [
+          {
+            "node": "문장 다듬기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": -1,
+    "availableInMCP": false
+  },
+  "versionId": "c3d4c23c-a092-4df5-948f-8f042be79076",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "db379bb0c9c7c0967d9b3fdb2d660cf36202c28e1428da279eef6f519d6a7ab0"
+  },
+  "id": "1SlWLjJFhUJuQUfG",
+  "tags": []
+}
